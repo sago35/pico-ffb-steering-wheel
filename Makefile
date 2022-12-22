@@ -19,3 +19,9 @@ wait:
 
 mon:
 	$(TINYGO) monitor -target $(TARGET)
+
+gdb:
+	$(TINYGO) gdb -x -target $(TARGET) -programmer=jlink 
+
+server:
+	"C:\Program Files\SEGGER\JLink\JLinkGDBServer.exe" -if swd -port 3333 -speed 4000 -device rp2040_m0_0 &
