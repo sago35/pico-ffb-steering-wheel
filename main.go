@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"machine"
-	"machine/debug"
 	"machine/usb/hid/joystick"
 	"os"
 	"strconv"
@@ -29,14 +27,6 @@ var (
 	csPin = machine.GP28
 )
 
-func logPrint() {
-	select {
-	case v := <-debug.DebugLog:
-		fmt.Printf("%#v\n", v)
-	default:
-	}
-}
-
 var js *joystick.Joystick
 
 func init() {
@@ -56,10 +46,10 @@ func init() {
 
 var (
 	axMap = map[int]int{
-		0: 1,
-		1: 2,
-		2: 3,
-		3: 4,
+		0: 1, // side
+		1: 2, // throttle
+		2: 4, // brake
+		3: 3, // clutch
 	}
 	shift = [][]int{
 		0: {2, 0, 1},
@@ -74,7 +64,7 @@ var (
 	prev   int = 0
 )
 
-func setShift(x, y int32) {
+func setShift(x, y int32) int {
 	const begin = 10
 	dx, dy := limitx(fitx(x)), limity(fity(y))
 	next := shift[dx][dy]
@@ -83,18 +73,15 @@ func setShift(x, y int32) {
 			js.SetButton(prev+begin-1, false)
 		}
 		if next > 0 {
-			debug.Debug("shift", next)
 			js.SetButton(next+begin-1, true)
 		}
 	}
 	prev = next
+	return next
 }
 
 func main() {
 	log.SetFlags(log.Lmicroseconds)
-	for !machine.Serial.DTR() {
-		time.Sleep(100 * time.Millisecond)
-	}
 	if err := spi.Configure(
 		machine.SPIConfig{
 			Frequency: 500000,
@@ -106,25 +93,6 @@ func main() {
 	); err != nil {
 		log.Print(err)
 	}
-
-	debug.Debug("boot:", "start")
-	go func() {
-		for v := range debug.DebugLog {
-			log.Printf("%s:%v", v.Key, v.Value)
-		}
-	}()
-	can := mcp2515.New(spi, csPin)
-	can.Configure()
-	if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
-		log.Fatal(err)
-	}
-	if err := motor.Setup(can); err != nil {
-		log.Fatal(err)
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	fit := utils.Map(-MaxAngle, MaxAngle, -32767, 32767)
-	limit := utils.Limit(-32767, 32767)
-	limit2 := utils.Limit(-500, 500)
 	go func() {
 		axises := make([]int32, 6)
 		scanner := bufio.NewScanner(os.Stdin)
@@ -139,13 +107,29 @@ func main() {
 				}
 				axises[i] = int32(v)
 			}
-			setShift(axises[0], axises[1])
+			shift := setShift(axises[0], axises[1])
 			for i, v := range axises[2:6] {
 				js.SetAxis(axMap[i], int(v))
+			}
+			if shift == 0 {
+				js.SetButton(0, axises[3] >= 16384)
+				js.SetButton(1, axises[4] >= 16384)
 			}
 		}
 		log.Print(scanner.Err())
 	}()
+	can := mcp2515.New(spi, csPin)
+	can.Configure()
+	if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
+		log.Fatal(err)
+	}
+	if err := motor.Setup(can); err != nil {
+		log.Fatal(err)
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	fit := utils.Map(-MaxAngle, MaxAngle, -32767, 32767)
+	limit1 := utils.Limit(-32767, 32767)
+	limit2 := utils.Limit(-500, 500)
 	cnt := 0
 	for range ticker.C {
 		state, err := motor.GetState(can)
@@ -172,32 +156,13 @@ func main() {
 			println()
 		}
 		cnt++
-		if err := motor.Output(can, int16(limit(output))); err != nil {
+		if err := motor.Output(can, int16(limit1(output))); err != nil {
 			log.Print(err)
 		}
-		js.SetButton(0, int(limit(angle)) > 30000)
-		js.SetButton(1, int(limit(angle)) < -30000)
-		js.SetAxis(0, int(limit(angle)))
+		js.SetButton(2, angle > 32767)
+		js.SetButton(3, angle < -32767)
+		js.SetAxis(0, int(limit1(angle)))
+		js.SetAxis(5, int(limit1(angle)))
 		js.SendState()
 	}
 }
-
-/* DiRT Rally 2.0
-00:01:57.311727 1: &{2 1 0 255 0 0 0 0 0 4 63 0 0 [{0 0 0 0 0 0} {0 0 0 0 0 0}] 0 0 0 0 65535 0 0}
-00:01:57.314466 SetEffect:[010101ffff00000000ffff043f0000000000]
-00:01:57.314910 StartEffect:[1]
-00:01:57.315188 SetCondition:[030100000000000000102710270000]
-00:01:57.315484 SetEffect:[01010bffff00000000ffff043f0000000000]
-00:01:57.315808 StartEffect:[1]
-00:01:57.316065 SetEffect:[010101ffff00000000ffff043f0000000000]
-00:01:57.316369 StartEffect:[1]
-00:01:57.316617 SetCondition:[030100000000000000102710270000]
-00:01:57.317265 SetEffect:[01010bffff00000000ffff043f0000000000]
-00:01:57.317596 StartEffect:[1]
-00:01:57.317887 SetEffect:[010101ffff00000000ffff043f0000000000]
-00:01:57.318205 StartEffect:[1]
-00:01:57.318454 SetCondition:[030100000000000000102710270000]
-00:01:57.318750 SetEffect:[01010bffff00000000ffff043f0000000000]
-00:01:57.319354 StartEffect:[1]
-00:01:57.319614 SetEffect:[010101ffff00000000ffff043f0000000000]
-*/
