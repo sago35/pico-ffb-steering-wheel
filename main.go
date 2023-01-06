@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"log"
 	"machine"
-	"machine/usb/hid/joystick"
+	"machine/usb/joystick"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +13,7 @@ import (
 	"tinygo.org/x/drivers/mcp2515"
 
 	"diy-ffb-wheel/motor"
+	"diy-ffb-wheel/pid"
 	"diy-ffb-wheel/utils"
 )
 
@@ -27,10 +28,15 @@ var (
 	csPin = machine.GP28
 )
 
-var js *joystick.Joystick
+var (
+	js *joystick.Joystick
+	ph *pid.PIDHandler
+)
 
 func init() {
-	js = joystick.New(joystick.Definitions{
+	ph = pid.NewPIDHandler()
+	js = joystick.Enable(joystick.Definitions{
+		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
 		AxisDefs: []joystick.Constraint{
@@ -41,7 +47,7 @@ func init() {
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 		},
-	})
+	}, ph.RxHandler, ph.SetupHandler, pid.Descriptor)
 }
 
 var (
@@ -138,7 +144,7 @@ func main() {
 		}
 		angle := fit(state.Angle)
 		output := limit2(-angle) + int32(state.Verocity)*128
-		force := js.CalcForces()
+		force := ph.CalcForces()
 		switch {
 		case angle > 32767:
 			output -= 8 * (angle - 32767)
