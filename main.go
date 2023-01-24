@@ -86,6 +86,10 @@ func setShift(x, y int32) int {
 	return next
 }
 
+var (
+	disableWheel = false
+)
+
 func main() {
 	time.Sleep(3 * time.Second)
 	log.SetFlags(log.Lmicroseconds)
@@ -127,10 +131,10 @@ func main() {
 	}()
 	can := mcp2515.New(spi, csPin)
 	can.Configure()
-	if true {
-		if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
-			log.Fatal(err)
-		}
+	if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
+		log.Fatal(err)
+	}
+	if !disableWheel {
 		if err := motor.Setup(can); err != nil {
 			log.Fatal(err)
 		}
@@ -156,10 +160,13 @@ func main() {
 	limit3cnt := 10
 	btn0 := false
 	for range ticker.C {
-		//state := motor.MotorState{}
-		state, err := motor.GetState(can)
-		if err != nil {
-			log.Print(err)
+		state := &motor.MotorState{}
+		var err error
+		if !disableWheel {
+			state, err = motor.GetState(can)
+			if err != nil {
+				log.Print(err)
+			}
 		}
 		angle := fit(state.Angle)
 		output := limit2(-angle) + int32(state.Verocity)*128
@@ -192,7 +199,7 @@ func main() {
 			println()
 		}
 		cnt++
-		if true {
+		if !disableWheel {
 			if err := motor.Output(can, int16(limit1(output))); err != nil {
 				log.Print(err)
 			}
