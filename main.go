@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"log"
 	"machine"
-	"machine/usb/hid/joystick"
+	"machine/usb/joystick"
 	"os"
 	"strconv"
 	"strings"
@@ -13,10 +13,12 @@ import (
 	"tinygo.org/x/drivers/mcp2515"
 
 	"diy-ffb-wheel/motor"
+	"diy-ffb-wheel/pid"
 	"diy-ffb-wheel/utils"
 )
 
 const (
+	DEBUG         = false
 	Lock2Lock     = 540
 	HalfLock2Lock = Lock2Lock / 2
 	MaxAngle      = 32768*HalfLock2Lock/360 - 1
@@ -27,10 +29,15 @@ var (
 	csPin = machine.GP28
 )
 
-var js *joystick.Joystick
+var (
+	js *joystick.Joystick
+	ph *pid.PIDHandler
+)
 
 func init() {
-	js = joystick.New(joystick.Definitions{
+	ph = pid.NewPIDHandler()
+	js = joystick.Enable(joystick.Definitions{
+		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
 		AxisDefs: []joystick.Constraint{
@@ -41,7 +48,7 @@ func init() {
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 		},
-	})
+	}, ph.RxHandler, ph.SetupHandler, pid.Descriptor)
 }
 
 var (
@@ -57,14 +64,14 @@ var (
 		2: {6, 0, 5},
 		3: {8, 0, 7},
 	}
-	fitx       = utils.Map(-32767, 32767, 0, 4)
-	limitx     = utils.Limit(0, 3)
-	fity       = utils.Map(-32767, 32767, 0, 3)
-	limity     = utils.Limit(0, 2)
-	prev   int = 0
+	fitx   = utils.Map(-32767, 32767, 0, 4)
+	limitx = utils.Limit(0, 3)
+	fity   = utils.Map(-32767, 32767, 0, 3)
+	limity = utils.Limit(0, 2)
+	prev   = 0
 )
 
-func setShift(x, y int32) int {
+func setShift(x, y int32) {
 	const begin = 10
 	dx, dy := limitx(fitx(x)), limity(fity(y))
 	next := shift[dx][dy]
@@ -77,7 +84,13 @@ func setShift(x, y int32) int {
 		}
 	}
 	prev = next
-	return next
+}
+
+func absInt32(n int32) int32 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 func main() {
@@ -93,12 +106,15 @@ func main() {
 	); err != nil {
 		log.Print(err)
 	}
+	receiver := true
 	go func() {
-		axises := make([]int32, 6)
+		defer func() { receiver = false }()
+		time.Sleep(10 * time.Second)
+		axises := make([]int32, 8)
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			for i, s := range strings.Split(scanner.Text(), ",") {
-				if i >= 6 {
+				if i >= len(axises) {
 					break
 				}
 				v, err := strconv.Atoi(s)
@@ -107,13 +123,18 @@ func main() {
 				}
 				axises[i] = int32(v)
 			}
-			shift := setShift(axises[0], axises[1])
 			for i, v := range axises[2:6] {
 				js.SetAxis(axMap[i], int(v))
 			}
-			if shift == 0 {
-				js.SetButton(0, axises[3] >= 16384)
-				js.SetButton(1, axises[4] >= 16384)
+			setShift(axises[0], axises[1])
+			switch {
+			case axises[7] > 0:
+				js.SetButton(8, true)
+			case axises[6] > 0:
+				js.SetButton(9, true)
+			default:
+				js.SetButton(8, false)
+				js.SetButton(9, false)
 			}
 		}
 		log.Print(scanner.Err())
@@ -138,7 +159,7 @@ func main() {
 		}
 		angle := fit(state.Angle)
 		output := limit2(-angle) + int32(state.Verocity)*128
-		force := js.CalcForces()
+		force := ph.CalcForces()
 		switch {
 		case angle > 32767:
 			output -= 8 * (angle - 32767)
@@ -146,13 +167,13 @@ func main() {
 			output -= 8 * (angle + 32767)
 		}
 		output -= force[0]
-		if cnt%100 == -1 {
+		if DEBUG && cnt%100 == 0 {
 			print(time.Now().UnixMilli(), ": ")
 			print("v:", state.Verocity, ", ")
 			print("c:", state.Current, ", ")
 			print("a:", angle, ", ")
 			print("f:", force[0], ", ", force[1], ", ")
-			print("o:", output, ", ")
+			print("o:", output, ", ", receiver)
 			println()
 		}
 		cnt++
