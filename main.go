@@ -25,7 +25,7 @@ const (
 
 var (
 	spi   = machine.SPI0
-	csPin = machine.GP28
+	csPin = machine.D5
 )
 
 var (
@@ -87,13 +87,14 @@ func setShift(x, y int32) int {
 }
 
 func main() {
+	time.Sleep(3 * time.Second)
 	log.SetFlags(log.Lmicroseconds)
 	if err := spi.Configure(
 		machine.SPIConfig{
 			Frequency: 500000,
-			SCK:       machine.GP2,
-			SDO:       machine.GP3,
-			SDI:       machine.GP4,
+			SCK:       machine.SPI0_SCK_PIN,
+			SDO:       machine.SPI0_SDO_PIN,
+			SDI:       machine.SPI0_SDI_PIN,
 			Mode:      0,
 		},
 	); err != nil {
@@ -126,18 +127,36 @@ func main() {
 	}()
 	can := mcp2515.New(spi, csPin)
 	can.Configure()
-	if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
-		log.Fatal(err)
+	if true {
+		if err := can.Begin(mcp2515.CAN500kBps, mcp2515.Clock8MHz); err != nil {
+			log.Fatal(err)
+		}
+		if err := motor.Setup(can); err != nil {
+			log.Fatal(err)
+		}
 	}
-	if err := motor.Setup(can); err != nil {
-		log.Fatal(err)
+
+	machine.InitADC()
+	accel := machine.ADC{Pin: machine.A0}
+	accel.Configure(machine.ADCConfig{})
+	cfg := []ADCConfig{
+		{Min: 57000, Max: 62500},
+		{Min: 8500, Max: 13000},
 	}
+
+	brake := machine.ADC{Pin: machine.A1}
+	brake.Configure(machine.ADCConfig{})
+
 	ticker := time.NewTicker(10 * time.Millisecond)
 	fit := utils.Map(-MaxAngle, MaxAngle, -32767, 32767)
 	limit1 := utils.Limit(-32767, 32767)
 	limit2 := utils.Limit(-500, 500)
 	cnt := 0
+	limit3 := utils.Limit(-1000, 1000)
+	limit3cnt := 10
+	btn0 := false
 	for range ticker.C {
+		//state := motor.MotorState{}
 		state, err := motor.GetState(can)
 		if err != nil {
 			log.Print(err)
@@ -152,23 +171,55 @@ func main() {
 			output -= 8 * (angle + 32767)
 		}
 		output -= force[0]
+		if limit3cnt > 0 {
+			limit3cnt--
+			output = limit3(output)
+		}
+		a := accel.Get()
+		b := brake.Get()
 		if cnt%100 == -1 {
+			//btn0 = !btn0
 			print(time.Now().UnixMilli(), ": ")
 			print("v:", state.Verocity, ", ")
 			print("c:", state.Current, ", ")
 			print("a:", angle, ", ")
 			print("f:", force[0], ", ", force[1], ", ")
 			print("o:", output, ", ")
+			print("A:", a, ", ")
+			print("A:", cfg[0].Convert(a), ", ")
+			print("B:", b, ", ")
+			print("B:", cfg[1].Convert(b), ", ")
 			println()
 		}
 		cnt++
-		if err := motor.Output(can, int16(limit1(output))); err != nil {
-			log.Print(err)
+		if true {
+			if err := motor.Output(can, int16(limit1(output))); err != nil {
+				log.Print(err)
+			}
 		}
+		js.SetButton(1, btn0)
 		js.SetButton(2, angle > 32767)
 		js.SetButton(3, angle < -32767)
 		js.SetAxis(0, int(limit1(angle)))
 		js.SetAxis(5, int(limit1(angle)))
+		js.SetAxis(1, cfg[0].Convert(a))
+		js.SetAxis(2, cfg[1].Convert(b))
 		js.SendState()
 	}
+}
+
+type ADCConfig struct {
+	Min int
+	Max int
+}
+
+func (c ADCConfig) Convert(x uint16) int {
+	ret := 32767 * (int(x) - c.Min) / (c.Max - c.Min)
+	if ret < 0 {
+		ret = 0
+	}
+	if 32767 < ret {
+		ret = 32767
+	}
+	return ret
 }
