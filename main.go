@@ -35,6 +35,11 @@ var (
 
 func init() {
 	ph = pid.NewPIDHandler()
+	//dbg.Printf("1 %p %d\n", &pid.Descriptor, len(pid.Descriptor))
+	//uptr := unsafe.Pointer(&(pid.Descriptor))
+	//hdr := (*reflect.SliceHeader)(uptr)
+	//dbg.Printf("Data: %x\n", hdr.Data)
+
 	js = joystick.Enable(joystick.Definitions{
 		ReportID:     1,
 		ButtonCnt:    24,
@@ -91,9 +96,10 @@ var (
 )
 
 func main() {
-	time.Sleep(3 * time.Second)
+	initx()
+	//time.Sleep(3 * time.Second)
 	log.SetFlags(log.Lmicroseconds)
-	if err := spi.Configure(
+	spi.Configure(
 		machine.SPIConfig{
 			Frequency: 500000,
 			SCK:       machine.SPI0_SCK_PIN,
@@ -101,9 +107,7 @@ func main() {
 			SDI:       machine.SPI0_SDI_PIN,
 			Mode:      0,
 		},
-	); err != nil {
-		log.Print(err)
-	}
+	)
 	go func() {
 		axises := make([]int32, 6)
 		scanner := bufio.NewScanner(os.Stdin)
@@ -140,12 +144,19 @@ func main() {
 		}
 	}
 
+	buttons := []machine.Pin{
+		machine.A2, machine.A3,
+	}
+	for _, btn := range buttons {
+		btn.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
+	}
+
 	machine.InitADC()
 	accel := machine.ADC{Pin: machine.A0}
 	accel.Configure(machine.ADCConfig{})
 	cfg := []ADCConfig{
 		{Min: 57000, Max: 62500},
-		{Min: 8500, Max: 13000},
+		{Min: 8800, Max: 13000},
 	}
 
 	brake := machine.ADC{Pin: machine.A1}
@@ -207,6 +218,8 @@ func main() {
 		js.SetButton(1, btn0)
 		js.SetButton(2, angle > 32767)
 		js.SetButton(3, angle < -32767)
+		js.SetButton(4, !buttons[0].Get())
+		js.SetButton(5, !buttons[1].Get())
 		js.SetAxis(0, int(limit1(angle)))
 		js.SetAxis(5, int(limit1(angle)))
 		js.SetAxis(1, cfg[0].Convert(a))
