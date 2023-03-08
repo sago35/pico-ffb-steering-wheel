@@ -99,7 +99,7 @@ func main() {
 	initx()
 	//time.Sleep(3 * time.Second)
 	log.SetFlags(log.Lmicroseconds)
-	spi.Configure(
+	err := spi.Configure(
 		machine.SPIConfig{
 			Frequency: 500000,
 			SCK:       machine.SPI0_SCK_PIN,
@@ -108,6 +108,9 @@ func main() {
 			Mode:      0,
 		},
 	)
+	if err != nil {
+		log.Fatal(err)
+	}
 	go func() {
 		axises := make([]int32, 6)
 		scanner := bufio.NewScanner(os.Stdin)
