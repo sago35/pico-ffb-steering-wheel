@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"log"
 	"machine"
-	"machine/usb/joystick"
+	"machine/usb/hid/joystick"
 	"os"
 	"strconv"
 	"strings"
@@ -29,7 +29,7 @@ var (
 )
 
 var (
-	js *joystick.Joystick
+	js = joystick.Joystick
 	ph *pid.PIDHandler
 )
 
@@ -40,7 +40,7 @@ func init() {
 	//hdr := (*reflect.SliceHeader)(uptr)
 	//dbg.Printf("Data: %x\n", hdr.Data)
 
-	js = joystick.Enable(joystick.Definitions{
+	js = joystick.OverrideJoystick(joystick.Definitions{
 		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
