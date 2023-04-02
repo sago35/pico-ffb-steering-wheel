@@ -97,6 +97,12 @@ var (
 
 func main() {
 	initx()
+
+	uart := machine.DefaultUART
+	tx := machine.UART_TX_PIN
+	rx := machine.UART_RX_PIN
+	uart.Configure(machine.UARTConfig{TX: tx, RX: rx})
+
 	//time.Sleep(3 * time.Second)
 	log.SetFlags(log.Lmicroseconds)
 	err := spi.Configure(
@@ -173,6 +179,8 @@ func main() {
 	limit3 := utils.Limit(-1000, 1000)
 	limit3cnt := 10
 	btn0 := false
+	uartButtons := make([]byte, 0, 3)
+	buttons2 := uint16(0)
 	for range ticker.C {
 		state := &motor.MotorState{}
 		var err error
@@ -198,6 +206,21 @@ func main() {
 		}
 		a := accel.Get()
 		b := brake.Get()
+
+		for uart.Buffered() > 0 {
+			data, _ := uart.ReadByte()
+			uartButtons = append(uartButtons, data)
+			if len(uartButtons) == 3 {
+				if uartButtons[0] != 0xFF {
+					uartButtons[0], uartButtons[1] = uartButtons[1], uartButtons[2]
+					uartButtons = uartButtons[:2]
+				} else {
+					buttons2 = (uint16(uartButtons[1]) << 8) + uint16(uartButtons[2])
+					uartButtons = uartButtons[:0]
+				}
+			}
+		}
+
 		if cnt%100 == -1 {
 			//btn0 = !btn0
 			print(time.Now().UnixMilli(), ": ")
@@ -219,10 +242,26 @@ func main() {
 			}
 		}
 		js.SetButton(1, btn0)
-		js.SetButton(2, angle > 32767)
-		js.SetButton(3, angle < -32767)
-		js.SetButton(4, !buttons[0].Get())
-		js.SetButton(5, !buttons[1].Get())
+		//js.SetButton(2, angle > 32767)
+		//js.SetButton(3, angle < -32767)
+		//js.SetButton(4, !buttons[0].Get())
+		//js.SetButton(5, !buttons[1].Get())
+		if true {
+			js.SetButton(2, (buttons2&0x0008) > 0)
+			js.SetButton(3, (buttons2&0x0004) > 0)
+			js.SetButton(4, (buttons2&0x8000) > 0)
+			js.SetButton(5, (buttons2&0x4000) > 0)
+			js.SetButton(6, (buttons2&0x2000) > 0)
+			js.SetButton(7, (buttons2&0x1000) > 0)
+			js.SetButton(8, (buttons2&0x0800) > 0)
+			js.SetButton(9, (buttons2&0x0400) > 0)
+			js.SetButton(10, (buttons2&0x0200) > 0)
+			js.SetButton(11, (buttons2&0x0100) > 0)
+			js.SetButton(12, (buttons2&0x0080) > 0)
+			js.SetButton(13, (buttons2&0x0040) > 0)
+			js.SetButton(14, (buttons2&0x0020) > 0)
+			js.SetButton(15, (buttons2&0x0010) > 0)
+		}
 		js.SetAxis(0, int(limit1(angle)))
 		js.SetAxis(5, int(limit1(angle)))
 		js.SetAxis(1, cfg[0].Convert(a))
