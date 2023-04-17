@@ -40,7 +40,7 @@ func init() {
 	//hdr := (*reflect.SliceHeader)(uptr)
 	//dbg.Printf("Data: %x\n", hdr.Data)
 
-	js = joystick.OverrideJoystick(joystick.Definitions{
+	js = joystick.UseSettings(joystick.Definitions{
 		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
