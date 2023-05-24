@@ -42,10 +42,10 @@ func init() {
 		HatSwitchCnt: 0,
 		AxisDefs: []joystick.Constraint{
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
-			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
-			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
-			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
-			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
+			{MinIn: 0, MaxIn: 32767, MinOut: 0, MaxOut: 32767},
+			{MinIn: 0, MaxIn: 32767, MinOut: 0, MaxOut: 32767},
+			{MinIn: 0, MaxIn: 32767, MinOut: 0, MaxOut: 32767},
+			{MinIn: 0, MaxIn: 32767, MinOut: 0, MaxOut: 32767},
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 		},
 	}, ph.RxHandler, ph.SetupHandler, pid.Descriptor)
@@ -71,7 +71,7 @@ var (
 	prev   = 0
 )
 
-func setShift(x, y int32) {
+func setShift(x, y int32) int {
 	const begin = 10
 	dx, dy := limitx(fitx(x)), limity(fity(y))
 	next := shift[dx][dy]
@@ -84,6 +84,7 @@ func setShift(x, y int32) {
 		}
 	}
 	prev = next
+	return next
 }
 
 func absInt32(n int32) int32 {
@@ -126,7 +127,8 @@ func main() {
 			for i, v := range axises[2:6] {
 				js.SetAxis(axMap[i], int(v))
 			}
-			setShift(axises[0], axises[1])
+			shift := setShift(axises[0], axises[1])
+			// for sequential mode
 			switch {
 			case axises[7] > 0:
 				js.SetButton(8, true)
@@ -135,6 +137,17 @@ func main() {
 			default:
 				js.SetButton(8, false)
 				js.SetButton(9, false)
+			}
+			if shift == 0 {
+				js.SetButton(0, axises[3] > 8192)
+				js.SetButton(1, axises[4] > 8192)
+				js.SetButton(5, axises[5] > 8192)
+				js.SetButton(6, axises[2] > 8192)
+			} else {
+				js.SetButton(0, false)
+				js.SetButton(1, false)
+				js.SetButton(5, false)
+				js.SetButton(6, false)
 			}
 		}
 		log.Print(scanner.Err())
