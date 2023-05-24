@@ -1,7 +1,7 @@
 TARGET=pico
 TINYGO=tinygo
-NAME=$(shell tinygo list .)
 -include .env
+NAME=$(shell $(tinygo) list .)
 
 .PHONY: build all flash wait mon
 
