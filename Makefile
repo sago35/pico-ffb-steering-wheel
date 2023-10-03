@@ -25,3 +25,6 @@ gdb:
 
 server:
 	"C:\Program Files\SEGGER\JLink\JLinkGDBServer.exe" -if swd -port 3333 -speed 4000 -device rp2040_m0_0 &
+
+docker:
+	docker compose up build 

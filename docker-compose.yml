@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  build:
+    build: .
+    image: tinygo/tinygo:0.27.0
+    volumes:
+      - .:/app
+    command: sh -c "go mod tidy && GOFLAGS="-buildvcs=false" tinygo build -target pico -o build/diy-ffb-wheel.uf2 ."
+    working_dir: /app
+    tty: true

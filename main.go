@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"log"
 	"machine"
-	"machine/usb/hid/joystick"
+	"machine/usb/joystick"
 	"os"
 	"strconv"
 	"strings"
@@ -30,12 +30,13 @@ var (
 )
 
 var (
+	js *joystick.Joystick
 	ph *pid.PIDHandler
 )
 
 func init() {
 	ph = pid.NewPIDHandler()
-	joystick.UseSettings(joystick.Definitions{
+	js = joystick.Enable(joystick.Definitions{
 		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
@@ -76,10 +77,10 @@ func setShift(x, y int32) int {
 	next := shift[dx][dy]
 	if next != prev {
 		if prev > 0 {
-			joystick.Joystick.SetButton(prev+begin-1, false)
+			js.SetButton(prev+begin-1, false)
 		}
 		if next > 0 {
-			joystick.Joystick.SetButton(next+begin-1, true)
+			js.SetButton(next+begin-1, true)
 		}
 	}
 	prev = next
@@ -124,29 +125,29 @@ func main() {
 				axises[i] = int32(v)
 			}
 			for i, v := range axises[2:6] {
-				joystick.Joystick.SetAxis(axMap[i], int(v))
+				js.SetAxis(axMap[i], int(v))
 			}
 			shift := setShift(axises[0], axises[1])
 			// for sequential mode
 			switch {
 			case axises[7] > 0:
-				joystick.Joystick.SetButton(8, true)
+				js.SetButton(8, true)
 			case axises[6] > 0:
-				joystick.Joystick.SetButton(9, true)
+				js.SetButton(9, true)
 			default:
-				joystick.Joystick.SetButton(8, false)
-				joystick.Joystick.SetButton(9, false)
+				js.SetButton(8, false)
+				js.SetButton(9, false)
 			}
 			if shift == 0 {
-				joystick.Joystick.SetButton(0, axises[3] > 8192)
-				joystick.Joystick.SetButton(1, axises[4] > 8192)
-				joystick.Joystick.SetButton(5, axises[5] > 8192)
-				joystick.Joystick.SetButton(6, axises[2] > 8192)
+				js.SetButton(0, axises[3] > 8192)
+				js.SetButton(1, axises[4] > 8192)
+				js.SetButton(5, axises[5] > 8192)
+				js.SetButton(6, axises[2] > 8192)
 			} else {
-				joystick.Joystick.SetButton(0, false)
-				joystick.Joystick.SetButton(1, false)
-				joystick.Joystick.SetButton(5, false)
-				joystick.Joystick.SetButton(6, false)
+				js.SetButton(0, false)
+				js.SetButton(1, false)
+				js.SetButton(5, false)
+				js.SetButton(6, false)
 			}
 		}
 		log.Print(scanner.Err())
@@ -189,13 +190,16 @@ func main() {
 			println()
 		}
 		cnt++
+		if cnt < 300 {
+			output = output * int32(cnt) / 300
+		}
 		if err := motor.Output(can, int16(limit1(output))); err != nil {
 			log.Print(err)
 		}
-		joystick.Joystick.SetButton(2, angle > 32767)
-		joystick.Joystick.SetButton(3, angle < -32767)
-		joystick.Joystick.SetAxis(0, int(limit1(angle)))
-		joystick.Joystick.SetAxis(5, int(limit1(angle)))
-		joystick.Joystick.SendState()
+		js.SetButton(2, angle > 32767)
+		js.SetButton(3, angle < -32767)
+		js.SetAxis(0, int(limit1(angle)))
+		js.SetAxis(5, int(limit1(angle)))
+		js.SendState()
 	}
 }
