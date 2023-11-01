@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"log"
 	"machine"
-	"machine/usb/joystick"
+	"machine/usb/hid/joystick"
 	"os"
 	"strconv"
 	"strings"
@@ -30,13 +30,13 @@ var (
 )
 
 var (
-	js *joystick.Joystick
+	js = joystick.Port()
 	ph *pid.PIDHandler
 )
 
 func init() {
 	ph = pid.NewPIDHandler()
-	js = joystick.Enable(joystick.Definitions{
+	joystick.UseSettings(joystick.Definitions{
 		ReportID:     1,
 		ButtonCnt:    24,
 		HatSwitchCnt: 0,
@@ -49,6 +49,7 @@ func init() {
 			{MinIn: -32767, MaxIn: 32767, MinOut: -32767, MaxOut: 32767},
 		},
 	}, ph.RxHandler, ph.SetupHandler, pid.Descriptor)
+	js = joystick.Port()
 }
 
 var (
