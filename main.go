@@ -168,15 +168,17 @@ func main() {
 	}
 
 	machine.InitADC()
-	accel := machine.ADC{Pin: machine.A0}
-	accel.Configure(machine.ADCConfig{})
+	brakex := machine.ADC{Pin: machine.A0}
+	brakex.Configure(machine.ADCConfig{})
+	brake := NewADCx(brakex)
 	cfg := []ADCConfig{
-		{Min: 57000, Max: 62500},
-		{Min: 8800, Max: 13000},
+		{Min: 7600, Max: 13600},  // accel
+		{Min: 57600, Max: 62900}, // brake
 	}
 
-	brake := machine.ADC{Pin: machine.A1}
-	brake.Configure(machine.ADCConfig{})
+	accelx := machine.ADC{Pin: machine.A1}
+	accelx.Configure(machine.ADCConfig{})
+	accel := NewADCx(accelx)
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	fit := utils.Map(-MaxAngle, MaxAngle, -32767, 32767)
@@ -294,4 +296,28 @@ func (c ADCConfig) Convert(x uint16) int {
 		ret = 32767
 	}
 	return ret
+}
+
+type ADCx struct {
+	buf [8]uint16
+	idx int
+	adc machine.ADC
+}
+
+func NewADCx(adc machine.ADC) *ADCx {
+	return &ADCx{
+		adc: adc,
+	}
+}
+
+func (a *ADCx) Get() uint16 {
+	a.buf[a.idx] = a.adc.Get()
+	a.idx = (a.idx + 1) % len(a.buf)
+
+	ret := uint32(0)
+	for _, v := range a.buf {
+		ret += uint32(v)
+	}
+
+	return uint16(ret / uint32(len(a.buf)))
 }
